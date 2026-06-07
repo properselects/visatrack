@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { listCase, listCaseSchema, AuditRequiredError } from '@/lib/marketplace-api';
+import { triggerAgent } from '@/lib/trigger';
 
 export const runtime = 'nodejs';
 
@@ -12,6 +13,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ caseId: string
   }
   try {
     const out = await listCase(caseId, parsed.data);
+
+    // Case is now listed — kick off the petition-drafter agent.
+    // Best-effort: a no-op in dev when Trigger.dev is not configured.
+    void triggerAgent({
+      agentType: 'petition_drafter',
+      caseId,
+      payload: { reason: 'case_listed', budgetBand: parsed.data.budgetBand },
+    }).catch((err) => console.error('[list] petition_drafter trigger failed', err));
+
     return NextResponse.json({ ok: true, ...out });
   } catch (e) {
     if (e instanceof AuditRequiredError) {

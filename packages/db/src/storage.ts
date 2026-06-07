@@ -3,9 +3,15 @@ import { createServerSupabaseClient } from './supabase';
 export const CASE_DOCUMENTS_BUCKET = 'case-documents';
 const SIGNED_URL_TTL_SECONDS = 60 * 60;
 
-function buildKey(tenantId: string, caseId: string, fileName: string): string {
+function buildKey(
+  tenantId: string,
+  caseId: string,
+  fileName: string,
+  docType?: string,
+): string {
   const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
-  return `tenants/${tenantId}/cases/${caseId}/${Date.now()}-${safeName}`;
+  const segment = docType ? `${docType.replace(/[^a-zA-Z0-9._-]/g, '_')}/` : '';
+  return `tenants/${tenantId}/cases/${caseId}/${segment}${Date.now()}-${safeName}`;
 }
 
 export interface UploadCaseDocumentResult {
@@ -19,9 +25,10 @@ export async function uploadCaseDocument(
   file: ArrayBuffer | Blob | Uint8Array,
   fileName: string,
   contentType?: string,
+  docType?: string,
 ): Promise<UploadCaseDocumentResult> {
   const supabase = createServerSupabaseClient();
-  const key = buildKey(tenantId, caseId, fileName);
+  const key = buildKey(tenantId, caseId, fileName, docType);
   const { error } = await supabase.storage
     .from(CASE_DOCUMENTS_BUCKET)
     .upload(key, file, {
