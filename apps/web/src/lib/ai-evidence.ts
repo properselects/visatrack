@@ -72,14 +72,20 @@ async function tryScrapeFlyerBookings(
   igHandle: string,
   stageName: string,
 ): Promise<FlyerBooking[]> {
-  if (!process.env.IG_SCRAPER_USERNAME || !process.env.IG_SCRAPER_PASSWORD) return [];
+  // FLYER_SCRAPER_URL points to the Railway worker service where Playwright runs.
+  // Not set on Vercel — returns empty and Claude falls back to intake data.
+  const scraperUrl = process.env.FLYER_SCRAPER_URL;
+  if (!scraperUrl) return [];
   try {
-    // Dynamic import keeps Playwright out of the bundle when not available
-    const { scrapeArtistFlyers } = await import(
-      '../../../../../../apps/visatrack/lib/scraper/instagram-flyers'
-    );
-    const results = await scrapeArtistFlyers(igHandle, stageName);
-    return results.filter((b) => b.isFlyer);
+    const res = await fetch(`${scraperUrl}/scrape/flyers`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ handle: igHandle, artistName: stageName }),
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!res.ok) return [];
+    const data = (await res.json()) as { bookings?: FlyerBooking[] };
+    return data.bookings ?? [];
   } catch {
     return [];
   }
