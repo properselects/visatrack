@@ -103,7 +103,15 @@ Output the JSON evidence record now.`;
   const response = await client.messages.create({
     model: 'claude-sonnet-4-6',
     max_tokens: 4096,
-    system: SYSTEM_PROMPT,
+    // Static system prompt — cache it so repeat intakes only pay for the
+    // (small, per-artist) user prompt. Mirrors apps/web/app/api/intake-hint.
+    system: [
+      {
+        type: 'text',
+        text: SYSTEM_PROMPT,
+        cache_control: { type: 'ephemeral' },
+      },
+    ],
     messages: [{ role: 'user', content: userPrompt }],
   });
 
