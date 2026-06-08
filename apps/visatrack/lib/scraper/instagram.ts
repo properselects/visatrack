@@ -115,11 +115,12 @@ async function performLogin(ctx: BrowserContext): Promise<void> {
     } catch {
       /* noop */
     }
-    await page.fill('input[name="username"]', username, { timeout: 30000 });
-    await page.fill('input[name="password"]', password);
+    await page.waitForSelector('input[type="text"], input[name="username"]', { timeout: 30000 });
+    await page.locator('input[type="text"]').first().fill(username);
+    await page.locator('input[type="password"]').first().fill(password);
     await Promise.all([
       page.waitForLoadState('networkidle', { timeout: 60000 }).catch(() => {}),
-      page.click('button[type="submit"]'),
+      page.getByRole('button', { name: /log in/i }).first().click(),
     ]);
     // Wait a bit for any "Save info" / "Turn on notifications" interstitials.
     await page.waitForTimeout(4000);
