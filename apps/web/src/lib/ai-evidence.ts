@@ -59,6 +59,32 @@ function tryParseJson<T>(text: string): T | null {
   }
 }
 
+interface FlyerBooking {
+  postUrl: string;
+  eventName?: string;
+  eventDate?: string;
+  venue?: string;
+  billingPosition?: string;
+  otherActs?: string[];
+}
+
+async function tryScrapeFlyerBookings(
+  igHandle: string,
+  stageName: string,
+): Promise<FlyerBooking[]> {
+  if (!process.env.IG_SCRAPER_USERNAME || !process.env.IG_SCRAPER_PASSWORD) return [];
+  try {
+    // Dynamic import keeps Playwright out of the bundle when not available
+    const { scrapeArtistFlyers } = await import(
+      '../../../../../../apps/visatrack/lib/scraper/instagram-flyers'
+    );
+    const results = await scrapeArtistFlyers(igHandle, stageName);
+    return results.filter((b) => b.isFlyer);
+  } catch {
+    return [];
+  }
+}
+
 export async function generateEvidenceFromIntake(
   _caseId: string,
   intake: Record<string, string>,
@@ -67,6 +93,25 @@ export async function generateEvidenceFromIntake(
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set');
 
   const client = new Anthropic({ apiKey });
+
+  const igRaw = intake.instagram ?? '';
+  const igHandle = igRaw.replace(/^@/, '').replace(/.*instagram\.com\//, '').replace(/\/$/, '').trim();
+  const stageName = intake.stage_name || intake.legal_name || '';
+
+  // Best-effort flyer scrape — runs only when IG creds are configured
+  const flyerBookings = igHandle
+    ? await tryScrapeFlyerBookings(igHandle, stageName)
+    : [];
+
+  const flyerSection =
+    flyerBookings.length > 0
+      ? `\nVerified Instagram flyer bookings (scraped from tagged posts — use these for contracts):\n${flyerBookings
+          .map(
+            (b) =>
+              `- ${b.eventName ?? 'Event'}${b.eventDate ? ` (${b.eventDate})` : ''}${b.venue ? ` @ ${b.venue}` : ''}${b.billingPosition ? ` — billing: ${b.billingPosition}` : ''}${b.postUrl ? ` — ${b.postUrl}` : ''}`,
+          )
+          .join('\n')}`
+      : '';
 
   const userPrompt = `Generate a dossier evidence summary for this artist:
 
@@ -97,7 +142,7 @@ ${intake.references || 'Not provided'}
 
 Notes:
 ${intake.notes || 'None'}
-
+${flyerSection}
 Output the JSON evidence record now.`;
 
   const response = await client.messages.create({
