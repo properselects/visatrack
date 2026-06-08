@@ -7,6 +7,7 @@ import {
   pricingBandForScore,
   type AuditTier,
   type AuditAddonKind,
+  type EvidenceData,
 } from './store';
 import { generateEvidence, scoreEvidence, criteriaCoverage } from './mock-evidence';
 import { sendEmail, magicLinkEmail } from './email';
@@ -111,7 +112,18 @@ export async function finalizeCase(id: string) {
   const stage = existing.intakeData?.stage_name || existing.intakeData?.legal_name || 'Artist';
   const genre = existing.intakeData?.genre || 'House';
   const platform = existing.intakeData?.primary_platform || 'DJ / Electronic';
-  const evidence = generateEvidence(id, stage, genre, platform);
+  let evidence: EvidenceData;
+  if (process.env.ANTHROPIC_API_KEY) {
+    try {
+      const { generateEvidenceFromIntake } = await import('./ai-evidence');
+      evidence = await generateEvidenceFromIntake(id, existing.intakeData ?? {});
+    } catch (err) {
+      console.warn('[finalizeCase] AI evidence failed, falling back to mock:', err);
+      evidence = generateEvidence(id, stage, genre, platform);
+    }
+  } else {
+    evidence = generateEvidence(id, stage, genre, platform);
+  }
   return store.updateCase(id, {
     evidenceData: evidence,
     evidenceScore: scoreEvidence(id),
