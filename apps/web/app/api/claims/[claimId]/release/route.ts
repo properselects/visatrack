@@ -10,9 +10,11 @@ export const runtime = 'nodejs';
 // without hitting this endpoint.
 export async function POST(req: Request, ctx: { params: Promise<{ claimId: string }> }) {
   const { claimId } = await ctx.params;
-  const adminToken = process.env.ADMIN_TOKEN || 'dev-admin';
+  // Fail closed: 'dev-admin' fallback only outside production.
+  const adminToken =
+    process.env.ADMIN_TOKEN || (process.env.NODE_ENV !== 'production' ? 'dev-admin' : undefined);
   const auth = req.headers.get('authorization') || '';
-  if (auth !== `Bearer ${adminToken}`) {
+  if (!adminToken || auth !== `Bearer ${adminToken}`) {
     return NextResponse.json({ error: 'admin token required' }, { status: 401 });
   }
   const claim = await store.getClaim(claimId);

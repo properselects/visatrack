@@ -27,7 +27,20 @@ Output ONLY strictly valid JSON matching this exact shape — no markdown fences
   "brandDeals": { "count": 12, "total": "$480,000", "topPartner": "string", "topAmount": "$65,000" },
   "monetization": [
     { "item": "string", "status": "string" }
-  ]
+  ],
+  "bio": {
+    "overview": "string (3-4 sentences: who the artist is, their scene, why they meet the O-1B extraordinary-ability bar)",
+    "activeSince": "string year e.g. 2014",
+    "stats": [ { "value": "string", "label": "string" } ],
+    "milestones": [ { "year": "string", "event": "string" } ]
+  },
+  "representation": [ { "scope": "string", "agency": "string", "detail": "string" } ],
+  "recognition": [ { "tag": "string UPPERCASE", "title": "string", "detail": "string" } ],
+  "events": [ { "date": "string e.g. 12 OCT 2025", "name": "string", "venue": "string", "location": "string e.g. London, UK" } ],
+  "eventFlyers": [ { "event": "string", "date": "string", "venue": "string", "billing": "string" } ],
+  "tourPosters": [ { "title": "string e.g. Spring 2026 Dates", "dates": ["string e.g. 12 OCT — Fabric, London, UK"] } ],
+  "pressPhotos": [ { "caption": "string" } ],
+  "portfolioSummary": [ { "label": "string", "value": "string" } ]
 }
 
 Rules:
@@ -39,7 +52,15 @@ Rules:
 - briefSummary: exactly 8 strings, one per criterion: Lead/Starring Role, National/Intl Recognition, Critical Reviews, Commercial Success, Recognition by Experts, High Salary, Original Contributions, Display at Major Venues.
 - topPosts: exactly 3 items.
 - brandDeals: derive from brand_deals_count, brand_partners, biggest_brand_deal.
-- monetization: exactly 3 items: platform revenue verification, average booking fee, annual revenue.`;
+- monetization: exactly 3 items: platform revenue verification, average booking fee, annual revenue.
+- bio: stats = exactly 4 tiles (e.g. Active Since, Top Platform Reach, Peak Chart Rank, Festival Appearances). milestones = 4-6 chronological career highlights, derived from years_active and big_gigs.
+- representation: exactly 3 items — Global Booking, US Booking, UK/EU Booking. Use credible agency names for the scene (e.g. Earth Agency, UTA, Wasserman, Paradigm, WME, Frame Artists). detail = one sentence on what it proves.
+- recognition: 3-4 items. tag is a short UPPERCASE label (e.g. EDITORIAL FEATURE, RADIO SUPPORT, INVITED SHOWCASE, PEER RECOGNITION). Ground in genre/scene.
+- events: 6 items — verified performance history at named venues, derived from big_gigs where possible.
+- eventFlyers: 4 items — confirmed bookings with billing position. These are strong O-1B evidence (named venue + artist billing).
+- tourPosters: 2 items — multi-date tour announcements spanning multiple countries, built from the events list.
+- pressPhotos: exactly 3 caption strings (primary press photo, editorial photo, live performance still). No image URLs.
+- portfolioSummary: 6-8 label/value rows summarizing the whole portfolio at a glance.`;
 
 function tryParseJson<T>(text: string): T | null {
   const candidate = text.trim();
@@ -173,6 +194,33 @@ Output the JSON evidence record now.`;
 
   const parsed = tryParseJson<EvidenceData>(text);
   if (!parsed) throw new Error('AI returned unparseable evidence JSON');
+  // The dossier renderer accesses the legacy fields below without guards, so a
+  // truncated/partial AI response (e.g. hitting max_tokens) would crash the
+  // page. Validate the required shape here; on failure the caller falls back to
+  // the deterministic mock generator.
+  if (!isValidEvidence(parsed)) {
+    throw new Error('AI returned incomplete evidence JSON (missing required fields)');
+  }
 
   return parsed;
+}
+
+function isValidEvidence(e: unknown): e is EvidenceData {
+  if (!e || typeof e !== 'object') return false;
+  const o = e as Record<string, unknown>;
+  const requiredArrays = [
+    'press',
+    'charts',
+    'social',
+    'contracts',
+    'testimonials',
+    'briefSummary',
+    'topPosts',
+    'monetization',
+  ] as const;
+  for (const k of requiredArrays) {
+    if (!Array.isArray(o[k])) return false;
+  }
+  if (!o.brandDeals || typeof o.brandDeals !== 'object') return false;
+  return true;
 }

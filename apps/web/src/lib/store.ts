@@ -43,6 +43,21 @@ export type EvidenceData = {
   topPosts: { title: string; platform: string; views: string }[];
   brandDeals: { count: number; total: string; topPartner: string; topAmount: string };
   monetization: { item: string; status: string }[];
+  // Full visa-portfolio sections (modeled on artist evidence portfolios like RUZE).
+  // Optional so older persisted cases without them still render.
+  bio?: {
+    overview: string;
+    activeSince: string;
+    stats: { value: string; label: string }[];
+    milestones: { year: string; event: string }[];
+  };
+  representation?: { scope: string; agency: string; detail: string }[];
+  recognition?: { tag: string; title: string; detail: string }[];
+  events?: { date: string; name: string; venue: string; location: string }[];
+  eventFlyers?: { event: string; date: string; venue: string; billing: string }[];
+  tourPosters?: { title: string; dates: string[] }[];
+  pressPhotos?: { caption: string }[];
+  portfolioSummary?: { label: string; value: string }[];
 };
 
 export type ArtistCaseStatus =
@@ -261,6 +276,24 @@ let seeded = false;
 let lastTickAt = 0;
 const TICK_THROTTLE_MS = 60_000;
 
+// Serialize every read-modify-write cycle. The JSON store has no transactions,
+// so concurrent mutations would otherwise read the same baseline and the last
+// writer would clobber the others (lost writes) — and check-then-act guards
+// (e.g. "is this case already claimed?") would not be atomic. This promise
+// chain forces mutations to run one at a time. In-process only: correct for the
+// single-instance demo; Track B moves to Postgres with real row locks.
+let writeLock: Promise<unknown> = Promise.resolve();
+function withWriteLock<T>(fn: () => Promise<T>): Promise<T> {
+  const run = writeLock.then(fn, fn);
+  // Keep the chain alive whether fn resolves or rejects; swallow to avoid
+  // unhandled-rejection noise on the chain itself (callers still see errors).
+  writeLock = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
 async function ensureDir() {
   await fs.mkdir(DATA_DIR, { recursive: true });
 }
@@ -281,12 +314,17 @@ async function writeStore(s: StoreShape) {
 }
 
 async function maybeAutoSeed(s: StoreShape): Promise<StoreShape> {
-  if (seeded) return s;
-  seeded = true;
-  if (s.firms.length > 0) return s;
+  if (s.firms.length > 0) {
+    seeded = true;
+    return s;
+  }
+  // Store is empty (fresh, deleted, or truncated). Always (re)seed — the old
+  // `seeded` early-return pinned an empty store in memory until process restart
+  // if the file was removed at runtime, silently losing all data.
   const { buildSeed } = await import('./seed-data');
   const seedData = buildSeed();
   await writeStore(seedData);
+  seeded = true;
   return seedData;
 }
 
@@ -370,9 +408,15 @@ async function maybeTick(s: StoreShape): Promise<StoreShape> {
   const now = Date.now();
   if (now - lastTickAt < TICK_THROTTLE_MS) return s;
   lastTickAt = now;
-  const a = tickAutoRelease(s);
-  const b = tickAuditLifecycle(s);
-  if (a || b) await writeStore(s);
+  // Run the tick mutation under the write lock on a FRESH snapshot so it can't
+  // clobber a concurrent update(). (update() also runs tickAutoRelease on every
+  // write, so this read-path tick is a secondary safety net.)
+  await withWriteLock(async () => {
+    const fresh = await readStore();
+    const a = tickAutoRelease(fresh);
+    const b = tickAuditLifecycle(fresh);
+    if (a || b) await writeStore(fresh);
+  });
   return s;
 }
 
@@ -388,32 +432,36 @@ export const store = {
   },
 
   async update(mut: (s: StoreShape) => void): Promise<StoreShape> {
-    const s = await readStore();
-    const seededS = await maybeAutoSeed(s);
-    tickAutoRelease(seededS);
-    mut(seededS);
-    await writeStore(seededS);
-    return seededS;
+    return withWriteLock(async () => {
+      const s = await readStore();
+      const seededS = await maybeAutoSeed(s);
+      tickAutoRelease(seededS);
+      mut(seededS);
+      await writeStore(seededS);
+      return seededS;
+    });
   },
 
   // Artists
   async upsertArtistByEmail(email: string, patch: Partial<ArtistAccount>): Promise<ArtistAccount> {
-    const s = await readStore();
-    await maybeAutoSeed(s);
-    let a = s.artists.find((x) => x.email.toLowerCase() === email.toLowerCase());
-    if (!a) {
-      a = {
-        id: randomUUID(),
-        email,
-        createdAt: new Date().toISOString(),
-        ...patch,
-      };
-      s.artists.push(a);
-    } else {
-      Object.assign(a, patch);
-    }
-    await writeStore(s);
-    return a;
+    return withWriteLock(async () => {
+      const s = await readStore();
+      await maybeAutoSeed(s);
+      let a = s.artists.find((x) => x.email.toLowerCase() === email.toLowerCase());
+      if (!a) {
+        a = {
+          id: randomUUID(),
+          email,
+          createdAt: new Date().toISOString(),
+          ...patch,
+        };
+        s.artists.push(a);
+      } else {
+        Object.assign(a, patch);
+      }
+      await writeStore(s);
+      return a;
+    });
   },
 
   async getArtistByEmail(email: string): Promise<ArtistAccount | undefined> {
@@ -561,6 +609,71 @@ export const store = {
       recomputeFirmScore(s, created.firmId);
     });
     return created;
+  },
+
+  // Atomic claim: the case-availability check, the claim insert, the case
+  // status flip, and the handoff creation all happen inside a SINGLE serialized
+  // mutation. This enforces the core invariant — exactly one firm can claim a
+  // listed case — even under concurrent requests. (Previously these were
+  // separate read-then-write calls, so two firms could both pass the guard and
+  // both be charged.)
+  async claimCaseAtomic(input: {
+    caseId: string;
+    firmId: string;
+    unlockFeeCents: number;
+    notes: string;
+  }): Promise<
+    | { ok: true; claim: FirmClaim; handoff: Handoff }
+    | { ok: false; reason: string }
+  > {
+    let result: { ok: true; claim: FirmClaim; handoff: Handoff } | { ok: false; reason: string } = {
+      ok: false,
+      reason: 'unknown',
+    };
+    await this.update((s) => {
+      const c = s.cases.find((x) => x.id === input.caseId);
+      if (!c) {
+        result = { ok: false, reason: 'case not found' };
+        return;
+      }
+      if (c.status !== 'listed') {
+        result = { ok: false, reason: 'case is not available to claim' };
+        return;
+      }
+      const existing = s.claims.find(
+        (cl) =>
+          cl.caseId === input.caseId && (cl.status === 'active' || cl.status === 'engaged'),
+      );
+      if (existing) {
+        result = { ok: false, reason: 'case already claimed' };
+        return;
+      }
+      const nowIso = new Date().toISOString();
+      const claim: FirmClaim = {
+        id: randomUUID(),
+        caseId: input.caseId,
+        firmId: input.firmId,
+        unlockFeeCents: input.unlockFeeCents,
+        claimedAt: nowIso,
+        status: 'active',
+      };
+      s.claims.push(claim);
+      c.status = 'claimed';
+      c.updatedAt = nowIso;
+      const handoff: Handoff = {
+        id: randomUUID(),
+        caseId: input.caseId,
+        firmId: input.firmId,
+        claimId: claim.id,
+        introSentAt: nowIso,
+        notes: input.notes,
+        createdAt: nowIso,
+      };
+      s.handoffs.push(handoff);
+      recomputeFirmScore(s, input.firmId);
+      result = { ok: true, claim, handoff };
+    });
+    return result;
   },
 
   async getClaim(id: string): Promise<FirmClaim | undefined> {

@@ -1,0 +1,8 @@
+[phases.install]
+cmds = ["pnpm install --frozen-lockfile", "pnpm --filter visatrack exec playwright install chromium --with-deps"]
+
+[phases.build]
+cmds = ["pnpm --filter visatrack build"]
+
+[start]
+cmd = "pnpm --filter visatrack start"

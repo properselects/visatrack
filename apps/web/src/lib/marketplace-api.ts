@@ -291,28 +291,21 @@ export const claimCaseSchema = z.object({
 export async function claimCase(caseId: string, input: z.infer<typeof claimCaseSchema>) {
   const ac = await store.getCase(caseId);
   if (!ac) throw new Error('case not found');
-  if (ac.status !== 'listed') throw new Error('case is not available to claim');
   const firm = await store.getFirm(input.firmId);
   if (!firm) throw new Error('firm not found');
   if (firm.status !== 'approved') throw new Error('firm not approved');
-  const existing = await store.getActiveClaimForCase(caseId);
-  if (existing) throw new Error('case already claimed');
   const unlockFeeCents = unlockFeeCentsForCase(ac);
-  // Stripe charge wiring is Track B. For the demo we just record the unlock
-  // fee captured from CASE_PRICING at claim time.
-  const claim = await store.createClaim({
+  // Atomic claim — the availability check + claim + status flip + handoff happen
+  // in a single serialized mutation so two firms can't both win the same case.
+  // Stripe charge wiring is Track B; the demo records the unlock fee only.
+  const res = await store.claimCaseAtomic({
     caseId,
     firmId: firm.id,
     unlockFeeCents,
-  });
-  await store.updateCase(caseId, { status: 'claimed' });
-  const handoff = await store.createHandoff({
-    caseId: ac.id,
-    firmId: firm.id,
-    claimId: claim.id,
-    introSentAt: new Date().toISOString(),
     notes: 'Auto-created on claim. Firm has 7 days to log first engagement with the artist.',
   });
+  if (!res.ok) throw new Error(res.reason);
+  const { claim, handoff } = res;
   const artist = await store.getArtistById(ac.artistId);
   const stage = artist?.stageName || artist?.legalName || 'Artist';
   await Promise.all([
@@ -347,6 +340,15 @@ export async function logEngagement(claimId: string) {
     status: 'engaged',
     engagedAt: claim.engagedAt ?? new Date().toISOString(),
   });
+  // Advance the case out of the dead-end `claimed` state into `matched` so the
+  // lifecycle reflects an engaged firm. (Previously `matched` was read by the UI
+  // but never written, so an engaged case stayed `claimed` forever.)
+  if (updated) {
+    const c = await store.getCase(claim.caseId);
+    if (c && c.status === 'claimed') {
+      await store.updateCase(claim.caseId, { status: 'matched' });
+    }
+  }
   return { claim: updated };
 }
 

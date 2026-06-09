@@ -73,6 +73,34 @@ function fmtNum(n: number): string {
   return `${n}`;
 }
 
+const BOOKING_AGENCIES = [
+  { scope: 'Global Booking', names: ['Earth Agency', 'Wasserman Music', 'Paradigm', 'WME'] },
+  { scope: 'US Booking', names: ['United Talent Agency (UTA)', 'CAA', 'AM Only / Paradigm'] },
+  { scope: 'UK / EU Booking', names: ['Frame Artists', 'Polytone', 'X-Ray Touring'] },
+];
+
+const RECOGNITION_TAGS = [
+  { tag: 'EDITORIAL FEATURE', titleFn: (n: string) => `"Ones to Watch" — ${n} named breakout act` },
+  { tag: 'RADIO SUPPORT', titleFn: () => `National radio airplay & support` },
+  { tag: 'INVITED SHOWCASE', titleFn: () => `Invitation-only showcase / lab session` },
+  { tag: 'PEER RECOGNITION', titleFn: (n: string) => `${n} cited by established artists in the scene` },
+];
+
+const VENUES = [
+  ['Fabric', 'London, UK'],
+  ['Studio 338', 'London, UK'],
+  ['Thuishaven', 'Amsterdam, NL'],
+  ['Factory Town', 'Miami, US'],
+  ['Printworks', 'London, UK'],
+  ['Ministry of Sound', 'London, UK'],
+  ['WOMB', 'Tokyo, JP'],
+  ['Pacha', 'Ibiza, ES'],
+  ['Output', 'Brooklyn, US'],
+  ['Hï Ibiza', 'Ibiza, ES'],
+] as const;
+
+const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+
 export function generateEvidence(
   caseId: string,
   stageName: string,
@@ -180,6 +208,103 @@ export function generateEvidence(
     press[2] = { ...last, title: `${last.title} (+ ${pressCount - 3} more hits)` };
   }
 
+  // ── Full visa-portfolio sections (modeled on artist evidence portfolios) ──
+
+  const activeYear = 2026 - (Math.floor(r() * 12) + 4); // active 4–15 years
+  const topSocial = social[0]?.value ?? '—';
+  const topChartRank = charts[0]?.rank ?? '—';
+  const festCount = Math.floor(r() * 40) + 18;
+
+  const bio = {
+    overview: `${stageName} is a ${genre.toLowerCase()} artist with sustained international recognition across the ${platform} ecosystem. Represented by major booking agencies and supported by tier-1 press, they have built a documented record of headline performances, charting releases, and consistent commercial demand — hallmarks of an artist of extraordinary ability under the O-1B standard.`,
+    activeSince: String(activeYear),
+    stats: [
+      { value: String(activeYear), label: 'Active Since' },
+      { value: topSocial, label: 'Top Platform Reach' },
+      { value: topChartRank, label: 'Peak Chart Rank' },
+      { value: String(festCount), label: 'Festival Appearances' },
+    ],
+    milestones: [
+      { year: String(activeYear), event: `${stageName} begins performing professionally` },
+      { year: String(activeYear + 2), event: 'First international bookings + agency representation' },
+      { year: String(activeYear + 4), event: `Debut release charts; tier-1 press coverage begins` },
+      { year: '2025', event: `Headline festival main-stage appearances across UK, EU, and US` },
+      { year: '2026', event: 'Sustained multi-country touring; expanded press & chart record' },
+    ],
+  };
+
+  const representation = BOOKING_AGENCIES.map((a) => ({
+    scope: a.scope,
+    agency: a.names[Math.floor(r() * a.names.length)] ?? a.names[0]!,
+    detail: `Officially represented for ${a.scope.toLowerCase()}. Confirms sustained professional career and demand across the territory.`,
+  }));
+
+  const recognition = RECOGNITION_TAGS.map((rt) => ({
+    tag: rt.tag,
+    title: rt.titleFn(stageName),
+    detail:
+      'Documented industry recognition — a marker of national/international acclaim relevant to the O-1B "recognition" criteria.',
+  }));
+
+  const pickVenue = () => VENUES[Math.floor(r() * VENUES.length)] ?? VENUES[0];
+  const eventHistory = Array.from({ length: 6 }).map(() => {
+    const [venue, location] = pickVenue();
+    const day = Math.floor(r() * 27) + 1;
+    const month = MONTHS[Math.floor(r() * MONTHS.length)] ?? 'OCT';
+    return {
+      date: `${day} ${month} ${2025 + Math.floor(r() * 2)}`,
+      name: `${stageName} ${r() > 0.5 ? 'headline set' : 'b2b showcase'}`,
+      venue,
+      location,
+    };
+  });
+
+  const eventFlyers = Array.from({ length: 4 }).map((_, i) => {
+    const [venue, location] = pickVenue();
+    const day = Math.floor(r() * 27) + 1;
+    const month = MONTHS[Math.floor(r() * MONTHS.length)] ?? 'MAR';
+    return {
+      event: i === 0 ? `${stageName} presents` : `${venue} pres. ${stageName}`,
+      date: `${day} ${month} 2026`,
+      venue: `${venue}, ${location}`,
+      billing: i < 2 ? 'Headline / top billing' : 'Featured artist',
+    };
+  });
+
+  const tourPosters = [
+    {
+      title: 'Spring 2026 Dates',
+      dates: eventHistory.slice(0, 3).map((e) => `${e.date} — ${e.venue}, ${e.location}`),
+    },
+    {
+      title: 'Winter 2025 Dates',
+      dates: eventHistory.slice(3, 6).map((e) => `${e.date} — ${e.venue}, ${e.location}`),
+    },
+  ];
+
+  const pressPhotos = [
+    { caption: 'Official press photo — primary (used in agency listings & media)' },
+    { caption: 'Official press photo — editorial / feature use' },
+    { caption: 'Live performance still — festival main stage' },
+  ];
+
+  const portfolioSummary = [
+    { label: 'Booking Agencies', value: representation.map((rrep) => rrep.agency).join(', ') },
+    { label: 'Industry Recognition', value: recognition.map((rr) => rr.tag).slice(0, 2).join(', ') },
+    {
+      label: 'Chart Achievements',
+      value: charts.map((ch) => `${ch.name} ${ch.rank}`).slice(0, 2).join('; '),
+    },
+    { label: 'Top Platform Reach', value: topSocial },
+    {
+      label: 'Major Venues Performed',
+      value: eventHistory.slice(0, 4).map((e) => e.venue).join(', '),
+    },
+    { label: 'Event Flyers (confirmed bookings)', value: `${eventFlyers.length} included` },
+    { label: 'Tour Announcements', value: `${tourPosters.length} multi-country schedules` },
+    { label: 'Festival Appearances', value: `${festCount}+ on record since ${activeYear}` },
+  ];
+
   return {
     press,
     charts,
@@ -190,6 +315,14 @@ export function generateEvidence(
     topPosts,
     brandDeals,
     monetization,
+    bio,
+    representation,
+    recognition,
+    events: eventHistory,
+    eventFlyers,
+    tourPosters,
+    pressPhotos,
+    portfolioSummary,
   };
 }
 

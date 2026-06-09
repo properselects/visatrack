@@ -35,11 +35,73 @@ export function DossierGrid({ c, locked }: { c: ArtistCase; locked: boolean }) {
       </div>
     );
   }
+  const full = { gridColumn: '1 / -1' } as const;
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 24 }}>
+      {/* § 01 — Biography & Industry Overview (full-width header) */}
+      {ev.bio ? (
+        <div style={full}>
+          <Section title="Biography & Industry Overview" eyebrow="§ 01 — Who they are & why it matters">
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(4, 1fr)',
+                gap: 12,
+                margin: '4px 0 18px',
+              }}
+            >
+              {ev.bio.stats.map((s, i) => (
+                <div className="vt-stat" key={i}>
+                  <div className="num">{s.value}</div>
+                  <div className="lbl">{s.label}</div>
+                </div>
+              ))}
+            </div>
+            <p style={{ color: 'var(--ink-2)', fontSize: 14, lineHeight: 1.7, margin: '0 0 18px' }}>
+              {ev.bio.overview}
+            </p>
+            <div className="vt-section-eyebrow" style={{ marginBottom: 8 }}>Career milestones</div>
+            {ev.bio.milestones.map((m, i) => (
+              <Row
+                key={i}
+                left={<strong style={{ color: 'var(--accent)' }}>{m.year}</strong>}
+                right={<span style={{ color: 'var(--ink-2)', textAlign: 'right' }}>{m.event}</span>}
+              />
+            ))}
+          </Section>
+        </div>
+      ) : null}
+
+      {/* § 02 — Booking Agency Representation */}
+      {ev.representation?.length ? (
+        <Section title="Booking Agency Representation" eyebrow="§ 02 — Representation">
+          {ev.representation.map((rep, i) => (
+            <div key={i} style={{ marginBottom: 12 }}>
+              <Row
+                left={<span>{rep.scope}</span>}
+                right={<strong style={{ color: 'var(--accent)' }}>{rep.agency}</strong>}
+              />
+            </div>
+          ))}
+        </Section>
+      ) : null}
+
+      {/* § 03 — Critical Recognition & Awards */}
+      {ev.recognition?.length ? (
+        <Section title="Critical Recognition & Awards" eyebrow="§ 03 — Recognition">
+          {ev.recognition.map((rec, i) => (
+            <div key={i} style={{ padding: '8px 0', borderBottom: '1px solid var(--rule)' }}>
+              <div className="vt-section-eyebrow accent" style={{ marginBottom: 4 }}>{rec.tag}</div>
+              <div style={{ fontSize: 13 }}>{rec.title}</div>
+            </div>
+          ))}
+        </Section>
+      ) : null}
+
+      {/* § 04 — Press Coverage & Interviews */}
       <Section
-        title="Press Clippings"
-        eyebrow="§ 01 — Press Archive"
+        title="Press Coverage & Interviews"
+        eyebrow="§ 04 — Press Archive"
         locked={locked}
         lockText="Unlock all articles"
       >
@@ -48,7 +110,68 @@ export function DossierGrid({ c, locked }: { c: ArtistCase; locked: boolean }) {
         ))}
       </Section>
 
-      <Section title="Chart Rankings" eyebrow="§ 02 — Charts & Standing">
+      {/* § 05 — Streaming & Digital Presence */}
+      <Section title="Streaming & Digital Presence" eyebrow="§ 05 — Platform Reach">
+        {ev.social.map((s, i) => (
+          <Row key={i} left={<span>{s.platform}</span>} right={<strong style={{ color: 'var(--accent)' }}>{s.value}</strong>} />
+        ))}
+      </Section>
+
+      {/* § 06 — Profile & Event History */}
+      {ev.events?.length ? (
+        <div style={full}>
+          <Section title="Profile & Event History" eyebrow="§ 06 — Verified performance record">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0 24px' }}>
+              {ev.events.map((e, i) => (
+                <Row
+                  key={i}
+                  left={
+                    <span>
+                      <strong>{e.name}</strong>
+                      <span style={{ color: 'var(--muted)', fontSize: 12 }}> — {e.venue}, {e.location}</span>
+                    </span>
+                  }
+                  right={<span style={{ color: 'var(--muted)', fontSize: 12 }}>{e.date}</span>}
+                />
+              ))}
+            </div>
+          </Section>
+        </div>
+      ) : null}
+
+      {/* § 07 — Event Flyers — Confirmed Performances */}
+      {ev.eventFlyers?.length ? (
+        <Section
+          title="Event Flyers — Confirmed Performances"
+          eyebrow="§ 07 — Promotional evidence"
+          locked={locked}
+          lockText="Unlock confirmed-booking flyers"
+        >
+          {ev.eventFlyers.map((f, i) => (
+            <div key={i} style={{ padding: '8px 0', borderBottom: '1px solid var(--rule)' }}>
+              <div style={{ fontSize: 13 }}><strong>{f.event}</strong> — {f.venue}</div>
+              <div style={{ color: 'var(--muted)', fontSize: 12 }}>{f.date} · {f.billing}</div>
+            </div>
+          ))}
+        </Section>
+      ) : null}
+
+      {/* § 08 — Tour Date Announcements */}
+      {ev.tourPosters?.length ? (
+        <Section title="Tour Date Announcements" eyebrow="§ 08 — Sustained touring">
+          {ev.tourPosters.map((t, i) => (
+            <div key={i} style={{ marginBottom: 12 }}>
+              <div className="vt-section-eyebrow accent" style={{ marginBottom: 6 }}>{t.title}</div>
+              {t.dates.map((d, j) => (
+                <div key={j} style={{ fontSize: 12, color: 'var(--ink-2)', padding: '3px 0' }}>{d}</div>
+              ))}
+            </div>
+          ))}
+        </Section>
+      ) : null}
+
+      {/* § 09 — Chart Performance */}
+      <Section title="Chart Performance" eyebrow="§ 09 — Charts & Standing">
         {ev.charts.map((ch, i) => (
           <div key={i} style={{ marginBottom: 12 }}>
             <Row left={<span>{ch.name}</span>} right={<strong style={{ color: 'var(--accent)' }}>{ch.rank}</strong>} />
@@ -59,19 +182,15 @@ export function DossierGrid({ c, locked }: { c: ArtistCase; locked: boolean }) {
         ))}
       </Section>
 
-      <Section title="Social Proof & Followers" eyebrow="§ 03 — Platform Reach">
-        {ev.social.map((s, i) => (
-          <Row key={i} left={<span>{s.platform}</span>} right={<strong style={{ color: 'var(--accent)' }}>{s.value}</strong>} />
-        ))}
-      </Section>
-
-      <Section title="Signed Performance Contracts" eyebrow="§ 04 — High Salary" locked={locked} lockText="High salary verified">
+      {/* § 10 — Signed Performance Contracts (High Salary) */}
+      <Section title="Signed Performance Contracts" eyebrow="§ 10 — High Salary" locked={locked} lockText="High salary verified">
         {ev.contracts.map((ct, i) => (
           <Row key={i} left={<span>{ct.event}</span>} right={<strong>{ct.amount}</strong>} />
         ))}
       </Section>
 
-      <Section title="Letter Excerpt — Festival Booker" eyebrow="§ 05 — Expert Testimonials" locked={locked} lockText={`Unlock ${ev.testimonials.length - 1} more letters`}>
+      {/* § 11 — Expert Testimonials */}
+      <Section title="Letter Excerpt — Festival Booker" eyebrow="§ 11 — Expert Testimonials" locked={locked} lockText={`Unlock ${ev.testimonials.length - 1} more letters`}>
         <div style={{ fontStyle: 'italic', color: 'var(--ink-2)', fontSize: 13, lineHeight: 1.7 }}>
           “{ev.testimonials[0]?.preview}”
           <div style={{ marginTop: 10, fontStyle: 'normal', color: 'var(--muted)', fontSize: 12, letterSpacing: '0.18em', textTransform: 'uppercase' }}>
@@ -80,16 +199,54 @@ export function DossierGrid({ c, locked }: { c: ArtistCase; locked: boolean }) {
         </div>
       </Section>
 
-      <Section title="O-1B Argument Summary" eyebrow="§ 06 — Brief" locked={locked} lockText="Full 3,427-word brief">
-        {ev.briefSummary.slice(0, 4).map((b, i) => (
-          <div key={i} style={{ padding: '10px 0', borderBottom: '1px solid var(--rule)', fontSize: 13 }}>
-            {b}
-          </div>
-        ))}
-      </Section>
+      {/* § 12 — Official Press Photos */}
+      {ev.pressPhotos?.length ? (
+        <div style={full}>
+          <Section title="Official Press Photos" eyebrow="§ 12 — Press kit">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+              {ev.pressPhotos.map((p, i) => (
+                <div key={i}>
+                  <div
+                    style={{
+                      aspectRatio: '4 / 3',
+                      background: 'linear-gradient(135deg, #1a1a1a, #2a2a2a)',
+                      border: '1px solid var(--rule)',
+                      borderRadius: 4,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'var(--muted)',
+                      fontSize: 11,
+                      letterSpacing: '.18em',
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    📷 Press photo
+                  </div>
+                  <div style={{ color: 'var(--muted)', fontSize: 11, marginTop: 6 }}>{p.caption}</div>
+                </div>
+              ))}
+            </div>
+          </Section>
+        </div>
+      ) : null}
 
-      <div style={{ gridColumn: '1 / -1' }}>
-        <Section title="Creator Reach & Brand Authority" eyebrow="§ 07 — Digital Footprint">
+      {/* § 13 — O-1B Argument Summary */}
+      <div style={full}>
+        <Section title="O-1B Argument Summary" eyebrow="§ 13 — Brief" locked={locked} lockText="Full 3,427-word brief">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0 24px' }}>
+            {ev.briefSummary.map((b, i) => (
+              <div key={i} style={{ padding: '10px 0', borderBottom: '1px solid var(--rule)', fontSize: 13 }}>
+                {b}
+              </div>
+            ))}
+          </div>
+        </Section>
+      </div>
+
+      {/* § 14 — Creator Reach & Brand Authority */}
+      <div style={full}>
+        <Section title="Creator Reach & Brand Authority" eyebrow="§ 14 — Digital Footprint">
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 24 }}>
             <div>
               <div className="vt-section-eyebrow" style={{ marginBottom: 8 }}>Top posts</div>
@@ -111,6 +268,21 @@ export function DossierGrid({ c, locked }: { c: ArtistCase; locked: boolean }) {
           </div>
         </Section>
       </div>
+
+      {/* Portfolio Summary table */}
+      {ev.portfolioSummary?.length ? (
+        <div style={full}>
+          <Section title="Portfolio Summary" eyebrow="§ — At a glance">
+            {ev.portfolioSummary.map((s, i) => (
+              <Row
+                key={i}
+                left={<span style={{ color: 'var(--muted)' }}>{s.label}</span>}
+                right={<strong style={{ textAlign: 'right', maxWidth: '60ch' }}>{s.value}</strong>}
+              />
+            ))}
+          </Section>
+        </div>
+      ) : null}
     </div>
   );
 }

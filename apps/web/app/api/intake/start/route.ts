@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { intakeStart, intakeStartSchema } from '@/lib/marketplace-api';
+import { isDemoMode } from '@/lib/session';
 
 export const runtime = 'nodejs';
 
@@ -9,6 +10,7 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: 'invalid input', details: parsed.error.issues }, { status: 400 });
   }
-  const out = await intakeStart(parsed.data);
-  return NextResponse.json({ ok: true, ...out });
+  const { magicLink, ...rest } = await intakeStart(parsed.data);
+  // Don't leak the magic-link token in production (auth bypass) — demo only.
+  return NextResponse.json({ ok: true, ...rest, ...(isDemoMode() ? { magicLink } : {}) });
 }

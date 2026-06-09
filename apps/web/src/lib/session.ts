@@ -10,6 +10,14 @@ export type Session =
 const COOKIE = 'vt_session';
 const MAX_AGE_S = 60 * 60 * 24 * 14; // 14 days
 
+// Demo mode (Track A): non-production. Gates demo-only affordances such as
+// returning a magic-link token directly in an API response (so the clickthrough
+// demo works without real email delivery). MUST be false in production, where
+// leaking the token would be an auth bypass.
+export function isDemoMode(): boolean {
+  return process.env.NODE_ENV !== 'production';
+}
+
 export async function getSession(): Promise<Session | null> {
   const c = await cookies();
   const raw = c.get(COOKIE)?.value;

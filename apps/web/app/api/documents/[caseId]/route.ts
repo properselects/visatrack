@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db, desc, eq, getDocumentUrl, schema } from '@visa-track/db';
+import { guardCaseViewer } from '@/lib/auth-guards';
 
 export const runtime = 'nodejs';
 
@@ -10,6 +11,11 @@ function supabaseConfigured(): boolean {
 // GET all documents for a case, each with a freshly-signed download URL.
 export async function GET(_req: Request, ctx: { params: Promise<{ caseId: string }> }) {
   const { caseId } = await ctx.params;
+
+  // Exhibits are sensitive — only the owning artist or a firm with a claim on
+  // the case may pull signed URLs (prod-enforced; demo allows clickthrough).
+  const guard = await guardCaseViewer(caseId);
+  if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status });
 
   if (!supabaseConfigured()) {
     return NextResponse.json(

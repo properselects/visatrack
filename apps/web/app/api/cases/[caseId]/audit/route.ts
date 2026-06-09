@@ -1,10 +1,13 @@
 import { NextResponse } from 'next/server';
 import { purchaseAudit, purchaseAuditSchema } from '@/lib/marketplace-api';
+import { guardCaseOwner } from '@/lib/auth-guards';
 
 export const runtime = 'nodejs';
 
 export async function POST(req: Request, ctx: { params: Promise<{ caseId: string }> }) {
   const { caseId } = await ctx.params;
+  const guard = await guardCaseOwner(caseId);
+  if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status });
   const json = await req.json().catch(() => ({}));
   const parsed = purchaseAuditSchema.safeParse(json);
   if (!parsed.success) {
